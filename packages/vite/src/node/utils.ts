@@ -782,6 +782,11 @@ function optimizeSafeRealPathSync() {
   })
 }
 
+// Files already passed to each watcher's add(). chokidar 3 (FSEvents mode)
+// registers another listener on every add() of an already-watched path, and
+// every file system event runs all of them.
+const watchedFilesByWatcher = new WeakMap<FSWatcher, Set<string>>()
+
 export function ensureWatchedFile(
   watcher: FSWatcher,
   file: string | null,
@@ -796,7 +801,18 @@ export function ensureWatchedFile(
     fs.existsSync(file)
   ) {
     // resolve file to normalized system path
-    watcher.add(path.resolve(file))
+    const resolved = path.resolve(file)
+    let watched = watchedFilesByWatcher.get(watcher)
+    if (!watched) {
+      const files = new Set<string>()
+      watchedFilesByWatcher.set(watcher, files)
+      // a removed file stops being watched, so let it be added again
+      watcher.on('unlink', (removed) => files.delete(path.resolve(removed)))
+      watched = files
+    }
+    if (watched.has(resolved)) return
+    watched.add(resolved)
+    watcher.add(resolved)
   }
 }
 

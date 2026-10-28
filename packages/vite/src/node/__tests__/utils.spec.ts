@@ -1,4 +1,5 @@
 import crypto from 'node:crypto'
+import { EventEmitter } from 'node:events'
 import fs from 'node:fs'
 import os, { type NetworkInterfaceInfoIPv4 } from 'node:os'
 import path from 'node:path'
@@ -12,6 +13,7 @@ import {
   asyncFlatten,
   bareImportRE,
   combineSourcemaps,
+  ensureWatchedFile,
   extractHostnamesFromCerts,
   extractHostnamesFromSubjectAltName,
   flattenId,
@@ -1374,5 +1376,22 @@ describe('resolveServerUrls', () => {
 
     expect(result.network).toStrictEqual(['http://10.0.0.5:3000/'])
     expect(result.networkInterfaceNames).toStrictEqual([undefined])
+  })
+})
+
+describe('ensureWatchedFile', () => {
+  test('adds a file outside the root to the watcher only once', () => {
+    const watcher = Object.assign(new EventEmitter(), { add: vi.fn() })
+    const file = fileURLToPath(import.meta.url)
+    const root = path.join(path.dirname(file), 'not-the-root')
+
+    ensureWatchedFile(watcher as any, file, root)
+    ensureWatchedFile(watcher as any, file, root)
+    expect(watcher.add).toHaveBeenCalledTimes(1)
+
+    // once the file is removed, it can be watched again
+    watcher.emit('unlink', file)
+    ensureWatchedFile(watcher as any, file, root)
+    expect(watcher.add).toHaveBeenCalledTimes(2)
   })
 })
